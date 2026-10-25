@@ -1,5 +1,11 @@
 import streamlit as st
 
+from processing.video import (
+    VideoProcessingError,
+    read_video_metadata,
+    save_uploaded_video,
+)
+
 
 def render_video_uploader(label: str, key: str):
     """動画をアップロードし、アップロードされたファイルを返す。"""
@@ -27,6 +33,20 @@ def render_video_info(video_file) -> None:
         f"ファイル名: {video_file.name}  |  "
         f"形式: {video_file.type or '不明'}  |  "
         f"サイズ: {format_file_size(video_file.size)}"
+    )
+
+    try:
+        with save_uploaded_video(video_file) as video_path:
+            metadata = read_video_metadata(video_path)
+    except VideoProcessingError as error:
+        st.error(f"動画情報を読み込めませんでした: {error}")
+        return
+
+    st.caption(
+        f"解像度: {metadata.width} x {metadata.height}  |  "
+        f"FPS: {metadata.fps:.2f}  |  "
+        f"フレーム数: {metadata.frame_count}  |  "
+        f"長さ: {metadata.duration_seconds:.2f} 秒"
     )
 
 
