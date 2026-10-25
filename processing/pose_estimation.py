@@ -11,6 +11,10 @@ class PoseEstimationError(Exception):
     """骨格推定に失敗した場合に発生する例外。"""
 
 
+class PoseNotDetectedError(PoseEstimationError):
+    """人物の骨格を検出できなかった場合に発生する例外。"""
+
+
 @dataclass(frozen=True)
 class Landmark:
     """1つの関節ランドマーク。座標は画像サイズに対して正規化される。"""
@@ -105,7 +109,9 @@ def estimate_pose_frames(
             annotated_frames.append(annotated_frame)
 
     if not results:
-        raise PoseEstimationError("人物の骨格を検出できませんでした。")
+        raise PoseNotDetectedError(
+            "体を検出できませんでした。全身を写した動画をアップロードしてください。"
+        )
 
     return PoseEstimationResult(
         frames=tuple(results),
