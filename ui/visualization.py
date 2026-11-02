@@ -8,6 +8,7 @@ from processing.alignment import AlignedPoseFrame
 def render_comparison_charts(
     comparisons: tuple[JointComparison, ...],
     aligned_frames: tuple[AlignedPoseFrame, ...],
+    min_visibility: float = 0.25,
 ) -> None:
     """関節角度差の集計とフレーム推移をグラフ表示する。"""
     if not comparisons or not aligned_frames:
@@ -25,7 +26,10 @@ def render_comparison_charts(
     )
 
     try:
-        difference_series = calculate_angle_difference_series(aligned_frames)
+        difference_series = calculate_angle_difference_series(
+            aligned_frames,
+            min_visibility=min_visibility,
+        )
     except ValueError as error:
         st.error(f"角度差を可視化できませんでした: {error}")
         return

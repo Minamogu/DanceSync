@@ -6,6 +6,7 @@ from processing.angles import calculate_frame_angles
 
 def calculate_angle_difference_series(
     aligned_frames: tuple[AlignedPoseFrame, ...],
+    min_visibility: float = 0.25,
 ) -> dict[str, list[Optional[float]]]:
     """対応フレームごとの関節角度差を、グラフ用データとして返す。"""
     if not aligned_frames:
@@ -14,19 +15,36 @@ def calculate_angle_difference_series(
     joint_names = {
         angle.name
         for aligned_frame in aligned_frames
-        for angle in calculate_frame_angles(aligned_frame.reference)
+        for angle in calculate_frame_angles(
+            aligned_frame.reference,
+            min_visibility=min_visibility,
+        )
     }
     differences_by_joint = {
         joint_name: [] for joint_name in sorted(joint_names)
     }
     for aligned_frame in aligned_frames:
+        if (
+            aligned_frame.reference.landmarks is None
+            or aligned_frame.practice.landmarks is None
+        ):
+            for joint_name in differences_by_joint:
+                differences_by_joint[joint_name].append(None)
+            continue
+
         reference_angles = {
             angle.name: angle.degrees
-            for angle in calculate_frame_angles(aligned_frame.reference)
+            for angle in calculate_frame_angles(
+                aligned_frame.reference,
+                min_visibility=min_visibility,
+            )
         }
         practice_angles = {
             angle.name: angle.degrees
-            for angle in calculate_frame_angles(aligned_frame.practice)
+            for angle in calculate_frame_angles(
+                aligned_frame.practice,
+                min_visibility=min_visibility,
+            )
         }
 
         for joint_name in differences_by_joint:

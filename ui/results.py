@@ -13,6 +13,9 @@ from processing.video import save_uploaded_video
 from ui.visualization import render_comparison_charts
 
 
+POSE_COMPARISON_MIN_VISIBILITY = 0.25
+
+
 def _estimate_pose(video_file, label: str):
     """アップロード動画から骨格を推定する。"""
     try:
@@ -29,6 +32,10 @@ def _estimate_pose(video_file, label: str):
 def _render_pose_result(result, label: str) -> None:
     """1本分の骨格推定結果を表示する。"""
     st.caption(f"骨格を検出したフレーム数: {result.detected_frame_count}")
+    st.caption(
+        f"補間フレーム数: {result.interpolated_frame_count} | "
+        f"長い欠損または未補間フレーム数: {result.missing_frame_count}"
+    )
     st.image(result.annotated_frames[0], caption=f"{label}（骨格描画）")
 
     angles = calculate_frame_angles(result.frames[0])
@@ -55,6 +62,7 @@ def _render_alignment_info(
         aligned_frames = align_pose_frames(
             reference_result.frames,
             practice_result.frames,
+            min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
         )
     except ValueError as error:
         st.error(f"フレームを対応付けられませんでした: {error}")
@@ -62,14 +70,27 @@ def _render_alignment_info(
 
     st.subheader("フレーム対応付け")
     st.caption(
-        f"時間割合に基づいて、{len(aligned_frames)}組のフレームを対応付けました。"
+        f"DTWで{len(aligned_frames)}組のフレームを対応付けました。"
     )
     st.dataframe(
         [
             {
                 "対応位置": f"{frame.normalized_position:.0%}",
                 "お手本フレーム": frame.reference.frame_index,
+                "お手本時刻（秒）": round(frame.reference.timestamp_seconds, 2),
                 "自分フレーム": frame.practice.frame_index,
+                "自分時刻（秒）": round(frame.practice.timestamp_seconds, 2),
+                "特徴量距離": round(frame.feature_distance, 4),
+                "補間フレーム": (
+                    "お手本"
+                    if frame.reference.interpolated
+                    else ""
+                )
+                + (
+                    "・自分"
+                    if frame.practice.interpolated
+                    else ""
+                ),
             }
             for frame in aligned_frames
         ],
@@ -87,7 +108,10 @@ def _render_comparison_info(
         return
 
     try:
-        comparisons = compare_aligned_frames(aligned_frames)
+        comparisons = compare_aligned_frames(
+            aligned_frames,
+            min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
+        )
     except ValueError as error:
         st.error(f"関節角度を比較できませんでした: {error}")
         return
@@ -118,7 +142,11 @@ def _render_comparison_info(
         hide_index=True,
         use_container_width=True,
     )
-    render_comparison_charts(comparisons, aligned_frames)
+    render_comparison_charts(
+        comparisons,
+        aligned_frames,
+        min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
+    )
 
     st.subheader("改善アドバイス")
     advice = generate_advice(comparisons)

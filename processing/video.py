@@ -30,6 +30,15 @@ class VideoMetadata:
         return self.frame_count / self.fps
 
 
+@dataclass(frozen=True)
+class VideoFrame:
+    """抽出された動画フレームと元動画上の位置。"""
+
+    image: np.ndarray
+    frame_index: int
+    timestamp_seconds: float
+
+
 def read_video_metadata(video_path: str | Path) -> VideoMetadata:
     """動画ファイルからFPS、フレーム数、解像度を取得する。"""
     capture = cv2.VideoCapture(str(video_path))
@@ -57,39 +66,52 @@ def read_video_metadata(video_path: str | Path) -> VideoMetadata:
 
 def extract_frames(
     video_path: str | Path,
-    sample_interval: int = 1,
+    sample_interval_seconds: float = 0.1,
     max_frames: int | None = None,
     resize: tuple[int, int] | None = None,
-) -> list[np.ndarray]:
-    """動画から一定間隔でフレームを抽出する。
+) -> list[VideoFrame]:
+    """動画から一定時間間隔でフレームを抽出する。
 
     抽出した画像はMediaPipeで扱いやすいRGB形式で返す。
     resizeを指定する場合は(width, height)の順で指定する。
     """
-    if sample_interval <= 0:
-        raise ValueError("sample_intervalは1以上で指定してください。")
+    if sample_interval_seconds <= 0:
+        raise ValueError("sample_interval_secondsは正の値で指定してください。")
     if max_frames is not None and max_frames <= 0:
         raise ValueError("max_framesは1以上で指定してください。")
     if resize is not None and (resize[0] <= 0 or resize[1] <= 0):
         raise ValueError("resizeには正の幅と高さを指定してください。")
 
     capture = cv2.VideoCapture(str(video_path))
-    frames: list[np.ndarray] = []
+    frames: list[VideoFrame] = []
     frame_index = 0
+    next_sample_time = 0.0
 
     try:
         if not capture.isOpened():
             raise VideoProcessingError("動画を開けませんでした。")
+
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            raise VideoProcessingError("動画のFPSを取得できませんでした。")
 
         while max_frames is None or len(frames) < max_frames:
             success, frame = capture.read()
             if not success:
                 break
 
-            if frame_index % sample_interval == 0:
+            timestamp_seconds = frame_index / fps
+            if timestamp_seconds + (0.5 / fps) >= next_sample_time:
                 if resize is not None:
                     frame = cv2.resize(frame, resize)
-                frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                frames.append(
+                    VideoFrame(
+                        image=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                        frame_index=frame_index,
+                        timestamp_seconds=timestamp_seconds,
+                    )
+                )
+                next_sample_time += sample_interval_seconds
             frame_index += 1
     finally:
         capture.release()

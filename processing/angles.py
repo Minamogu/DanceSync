@@ -62,6 +62,9 @@ def calculate_frame_angles(
     if not 0 <= min_visibility <= 1:
         raise ValueError("min_visibilityは0から1の範囲で指定してください。")
 
+    if pose_frame.landmarks is None:
+        return ()
+
     landmarks = {landmark.name: landmark for landmark in pose_frame.landmarks}
     angles: list[JointAngle] = []
 

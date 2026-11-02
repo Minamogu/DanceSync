@@ -29,6 +29,12 @@ def compare_aligned_frames(
 
     differences_by_joint: dict[str, list[float]] = {}
     for aligned_frame in aligned_frames:
+        if (
+            aligned_frame.reference.landmarks is None
+            or aligned_frame.practice.landmarks is None
+        ):
+            continue
+
         reference_angles = {
             angle.name: angle.degrees
             for angle in calculate_frame_angles(
