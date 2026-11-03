@@ -21,6 +21,60 @@ class AlignedPoseFrame:
     path_index: int
 
 
+@dataclass(frozen=True)
+class AlignmentDiagnostics:
+    """DTW経路の診断情報。"""
+
+    pair_count: int
+    unique_reference_frame_count: int
+    unique_practice_frame_count: int
+    max_reference_repeat_count: int
+    max_practice_repeat_count: int
+    mean_feature_distance: float
+    max_feature_distance: float
+    reference_start_seconds: float
+    reference_end_seconds: float
+    practice_start_seconds: float
+    practice_end_seconds: float
+
+
+def summarize_alignment(
+    aligned_frames: tuple[AlignedPoseFrame, ...],
+) -> AlignmentDiagnostics:
+    """DTW対応の重複・距離・時間範囲を集計する。"""
+    if not aligned_frames:
+        raise ValueError("診断対象の対応フレームがありません。")
+
+    reference_indices = [
+        frame.reference.frame_index for frame in aligned_frames
+    ]
+    practice_indices = [
+        frame.practice.frame_index for frame in aligned_frames
+    ]
+    reference_counts = {
+        index: reference_indices.count(index)
+        for index in set(reference_indices)
+    }
+    practice_counts = {
+        index: practice_indices.count(index)
+        for index in set(practice_indices)
+    }
+    distances = [frame.feature_distance for frame in aligned_frames]
+    return AlignmentDiagnostics(
+        pair_count=len(aligned_frames),
+        unique_reference_frame_count=len(reference_counts),
+        unique_practice_frame_count=len(practice_counts),
+        max_reference_repeat_count=max(reference_counts.values()),
+        max_practice_repeat_count=max(practice_counts.values()),
+        mean_feature_distance=sum(distances) / len(distances),
+        max_feature_distance=max(distances),
+        reference_start_seconds=aligned_frames[0].reference.timestamp_seconds,
+        reference_end_seconds=aligned_frames[-1].reference.timestamp_seconds,
+        practice_start_seconds=aligned_frames[0].practice.timestamp_seconds,
+        practice_end_seconds=aligned_frames[-1].practice.timestamp_seconds,
+    )
+
+
 def _valid_feature_frames(
     frames: tuple[PoseFrame, ...],
     min_visibility: float,
@@ -54,6 +108,7 @@ def _dtw_path(
     reference_features: tuple[tuple[PoseFrame, PoseFeature], ...],
     practice_features: tuple[tuple[PoseFrame, PoseFeature], ...],
     band_ratio: float,
+    max_repeat_count: int,
 ) -> tuple[tuple[int, int, float], ...]:
     reference_count = len(reference_features)
     practice_count = len(practice_features)
@@ -140,7 +195,31 @@ def _dtw_path(
         practice_index = previous_practice
 
     path.reverse()
-    return tuple(path)
+
+    if max_repeat_count <= 0:
+        raise ValueError("max_repeat_countは1以上で指定してください。")
+
+    compressed_path: list[tuple[int, int, float]] = []
+    reference_run_count = 0
+    practice_run_count = 0
+    for pair in path:
+        previous = compressed_path[-1] if compressed_path else None
+        if previous is not None and pair[0] == previous[0]:
+            reference_run_count += 1
+        else:
+            reference_run_count = 1
+        if previous is not None and pair[1] == previous[1]:
+            practice_run_count += 1
+        else:
+            practice_run_count = 1
+        if (
+            reference_run_count > max_repeat_count
+            or practice_run_count > max_repeat_count
+        ):
+            continue
+        compressed_path.append(pair)
+
+    return tuple(compressed_path)
 
 
 def align_pose_frames(
@@ -149,6 +228,7 @@ def align_pose_frames(
     pair_count: int | None = None,
     band_ratio: float = 0.25,
     min_visibility: float = 0.5,
+    max_repeat_count: int = 4,
 ) -> tuple[AlignedPoseFrame, ...]:
     """正規化骨格特徴量のDTWでフレームを対応付ける。
 
@@ -160,6 +240,8 @@ def align_pose_frames(
         raise ValueError("対応付けには両方の骨格フレームが必要です。")
     if not 0 < band_ratio <= 1:
         raise ValueError("band_ratioは0より大きく1以下で指定してください。")
+    if max_repeat_count <= 0:
+        raise ValueError("max_repeat_countは1以上で指定してください。")
 
     reference_features = _valid_feature_frames(
         reference_frames,
@@ -178,6 +260,7 @@ def align_pose_frames(
         reference_features,
         practice_features,
         band_ratio=band_ratio,
+        max_repeat_count=max_repeat_count,
     )
     reference_duration = reference_frames[-1].timestamp_seconds
     practice_duration = practice_frames[-1].timestamp_seconds

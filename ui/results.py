@@ -1,7 +1,11 @@
 import streamlit as st
 
 from processing.advice import generate_advice
-from processing.alignment import AlignedPoseFrame, align_pose_frames
+from processing.alignment import (
+    AlignedPoseFrame,
+    align_pose_frames,
+    summarize_alignment,
+)
 from processing.angles import calculate_frame_angles
 from processing.comparison import compare_aligned_frames
 from processing.pose_estimation import (
@@ -69,8 +73,12 @@ def _render_alignment_info(
         return ()
 
     st.subheader("フレーム対応付け")
+    diagnostics = summarize_alignment(aligned_frames)
     st.caption(
         f"DTWで{len(aligned_frames)}組のフレームを対応付けました。"
+        f" お手本側の最大反復: {diagnostics.max_reference_repeat_count}回、"
+        f"自分側の最大反復: {diagnostics.max_practice_repeat_count}回、"
+        f"平均特徴量距離: {diagnostics.mean_feature_distance:.3f}。"
     )
     st.dataframe(
         [
@@ -117,36 +125,35 @@ def _render_comparison_info(
         return
 
     st.subheader("関節角度の比較")
-    if not comparisons:
-        st.info("両方の動画で共通して計算できる関節角度がありませんでした。")
-        return
-
-    st.caption(
-        "角度差は「自分の動画 - お手本動画」で計算しています。"
-        "平均差と最大差は絶対値です。"
-    )
-    st.dataframe(
-        [
-            {
-                "関節": comparison.name,
-                "比較フレーム数": comparison.sample_count,
-                "平均角度差（度）": round(comparison.mean_difference, 1),
-                "最大角度差（度）": round(comparison.max_difference, 1),
-                "符号付き平均差（度）": round(
-                    comparison.mean_signed_difference,
-                    1,
-                ),
-            }
-            for comparison in comparisons
-        ],
-        hide_index=True,
-        use_container_width=True,
-    )
-    render_comparison_charts(
-        comparisons,
-        aligned_frames,
-        min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
-    )
+    if comparisons:
+        st.caption(
+            "角度差は「自分の動画 - お手本動画」で計算しています。"
+            "平均差と最大差は絶対値です。"
+        )
+        st.dataframe(
+            [
+                {
+                    "関節": comparison.name,
+                    "比較フレーム数": comparison.sample_count,
+                    "平均角度差（度）": round(comparison.mean_difference, 1),
+                    "最大角度差（度）": round(comparison.max_difference, 1),
+                    "符号付き平均差（度）": round(
+                        comparison.mean_signed_difference,
+                        1,
+                    ),
+                }
+                for comparison in comparisons
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+        render_comparison_charts(
+            comparisons,
+            aligned_frames,
+            min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
+        )
+    else:
+        st.info("共通して計算できる関節角度はありませんでした。")
 
     st.subheader("改善アドバイス")
     advice = generate_advice(
@@ -158,14 +165,24 @@ def _render_comparison_info(
         return
     for item in advice:
         st.warning(
-            f"**{item.joint_name}**（角度差 {item.difference:.1f}度、"
+            f"**{item.joint_name}**（差 {item.difference:.3f}、"
             f"{item.persistence_count}フレーム継続）: {item.message}"
         )
+        if item.evidence_metrics:
+            st.caption("判定に使用した指標: " + "、".join(item.evidence_metrics))
         st.caption(
-            f"お手本 {item.aligned_frame.reference.timestamp_seconds:.2f}秒 "
-            f"（{item.reference_angle:.1f}度） / "
-            f"自分 {item.aligned_frame.practice.timestamp_seconds:.2f}秒 "
-            f"（{item.practice_angle:.1f}度）"
+            f"お手本 {item.aligned_frame.reference.timestamp_seconds:.2f}秒"
+            + (
+                f"（{item.reference_angle:.1f}度）"
+                if item.reference_angle is not None
+                else ""
+            )
+            + f" / 自分 {item.aligned_frame.practice.timestamp_seconds:.2f}秒"
+            + (
+                f"（{item.practice_angle:.1f}度）"
+                if item.practice_angle is not None
+                else ""
+            )
         )
         reference_column, practice_column = st.columns(2)
         with reference_column:

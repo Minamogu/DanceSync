@@ -10,20 +10,12 @@ def render_comparison_charts(
     aligned_frames: tuple[AlignedPoseFrame, ...],
     min_visibility: float = 0.25,
 ) -> None:
-    """関節角度差の集計とフレーム推移をグラフ表示する。"""
+    """対応フレームごとの関節角度差をグラフ表示する。"""
     if not comparisons or not aligned_frames:
         return
 
     st.subheader("角度差の可視化")
-    st.caption("平均角度差と、対応フレームごとの角度差を表示しています。")
-
-    st.markdown("#### 部位ごとの平均角度差")
-    st.bar_chart(
-        {
-            comparison.name: [comparison.mean_difference]
-            for comparison in comparisons
-        }
-    )
+    st.caption("対応フレームごとの角度差を表示しています。")
 
     try:
         difference_series = calculate_angle_difference_series(
