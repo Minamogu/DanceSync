@@ -149,77 +149,45 @@ def _render_comparison_info(
     )
 
     st.subheader("改善アドバイス")
-    advice = generate_advice(comparisons)
+    advice = generate_advice(
+        aligned_frames,
+        min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
+    )
     if not advice:
         st.success("大きな角度差はありませんでした。")
         return
     for item in advice:
         st.warning(
-            f"**{item.joint_name}**（平均差 {item.difference:.1f}度）: "
-            f"{item.message}"
+            f"**{item.joint_name}**（角度差 {item.difference:.1f}度、"
+            f"{item.persistence_count}フレーム継続）: {item.message}"
         )
-        worst_frame = _find_worst_frame(aligned_frames, item.joint_name)
-        if worst_frame is None:
-            st.info("この部位の比較フレームを特定できませんでした。")
-            continue
-
         st.caption(
-            "最大角度差が確認された対応フレーム "
-            f"(お手本 {worst_frame.reference.timestamp_seconds:.2f}秒 / "
-            f"自分 {worst_frame.practice.timestamp_seconds:.2f}秒)"
+            f"お手本 {item.aligned_frame.reference.timestamp_seconds:.2f}秒 "
+            f"（{item.reference_angle:.1f}度） / "
+            f"自分 {item.aligned_frame.practice.timestamp_seconds:.2f}秒 "
+            f"（{item.practice_angle:.1f}度）"
         )
         reference_column, practice_column = st.columns(2)
         with reference_column:
             st.image(
-                worst_frame.reference.source_frame,
+                item.aligned_frame.reference.source_frame,
                 caption=(
-                    f"お手本動画: {worst_frame.reference.timestamp_seconds:.2f}秒 "
-                    f"(フレーム {worst_frame.reference.frame_index})"
+                    f"お手本動画: "
+                    f"{item.aligned_frame.reference.timestamp_seconds:.2f}秒 "
+                    f"(フレーム {item.aligned_frame.reference.frame_index})"
                 ),
                 use_container_width=True,
             )
         with practice_column:
             st.image(
-                worst_frame.practice.source_frame,
+                item.aligned_frame.practice.source_frame,
                 caption=(
-                    f"練習動画: {worst_frame.practice.timestamp_seconds:.2f}秒 "
-                    f"(フレーム {worst_frame.practice.frame_index})"
+                    f"練習動画: "
+                    f"{item.aligned_frame.practice.timestamp_seconds:.2f}秒 "
+                    f"(フレーム {item.aligned_frame.practice.frame_index})"
                 ),
                 use_container_width=True,
             )
-
-
-def _find_worst_frame(
-    aligned_frames: tuple[AlignedPoseFrame, ...],
-    joint_name: str,
-) -> AlignedPoseFrame | None:
-    """指定部位の角度差が最大となる対応フレームを返す。"""
-    worst_frame: AlignedPoseFrame | None = None
-    worst_difference = -1.0
-    for aligned_frame in aligned_frames:
-        reference_angles = {
-            angle.name: angle.degrees
-            for angle in calculate_frame_angles(
-                aligned_frame.reference,
-                min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
-            )
-        }
-        practice_angles = {
-            angle.name: angle.degrees
-            for angle in calculate_frame_angles(
-                aligned_frame.practice,
-                min_visibility=POSE_COMPARISON_MIN_VISIBILITY,
-            )
-        }
-        if joint_name not in reference_angles or joint_name not in practice_angles:
-            continue
-        difference = abs(
-            practice_angles[joint_name] - reference_angles[joint_name]
-        )
-        if difference > worst_difference:
-            worst_difference = difference
-            worst_frame = aligned_frame
-    return worst_frame
 
 
 def render_analysis_results(reference_video, practice_video) -> None:
