@@ -29,20 +29,18 @@ def generate_advice(
             continue
 
         if comparison.mean_signed_difference > 0:
-            direction = "小さく"
+            direction = "曲げ"
         elif comparison.mean_signed_difference < 0:
-            direction = "大きく"
+            direction = "伸ばし"
         else:
-            direction = "調整して"
+            direction = "調整"
 
-        if direction == "調整して":
+        if direction == "調整":
             message = (
                 f"{comparison.name}の角度をお手本に近づけるように調整してください。"
             )
         else:
-            message = (
-                f"{comparison.name}の角度をもう少し{direction}しましょう。"
-            )
+            message = f"{comparison.name}をもう少し{direction}ましょう。"
 
         advice.append(
             Advice(
