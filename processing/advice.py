@@ -67,8 +67,8 @@ def _message(metric: MetricValue) -> str:
             return "お手本より腰の位置が高いため、もう少し腰を落としましょう。"
         return "お手本より腰の位置が低いため、少し腰を上げましょう。"
     if metric.difference < 0:
-        return f"{metric.name}をもう少し曲げましょう。"
-    return f"{metric.name}をもう少し伸ばしましょう。"
+        return f"{metric.name}をもう少し伸ばしましょう。"
+    return f"{metric.name}をもう少し曲げましょう。"
 
 
 def _episodes(
